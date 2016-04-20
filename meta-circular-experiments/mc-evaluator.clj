@@ -248,8 +248,8 @@
   (if (= (count vars) (count vals))
     (cons (make-frame vars vals) base-env)
     (if (< (count vars) (count vals))
-      (Error. (str "Too many arguments supplied " vars vals))
-      (Error. (str "Too few arguments supplied " vars vals)))))
+      (error "Too many arguments supplied " vars)
+      (error "Too few arguments supplied " vars))))
 
 (defn copy-environment [e]
   (doall (map #(atom @%) e)))
@@ -262,12 +262,10 @@
             (letfn [(scan [frame]
                       (if (contains? frame variable)
                         (let [value (get frame variable)]
-                          (if (= value '*unassigned*)
-                            (Error. (str "Unassigned variable " variable))
-                            value))
+                            value)
                         (env-loop (enclosing-environment env))))]
               (if (= env the-empty-environment)
-                (Error. (str "Unbound variable " variable))
+                (error "Unbound variable -- LOOKUP" variable)
                 (let [frame (first-frame env)]
                   (scan @frame)))))]
     (env-loop env)))
@@ -280,15 +278,12 @@
                         (swap! frame assoc variable value)
                         (env-loop (enclosing-environment env))))]
               (if (= env the-empty-environment)
-                (Error. (str "Unbound variable -- SET! " variable))
+                (error "Unbound variable -- SET!" variable)
                 (scan (first-frame env)))))]
     (env-loop env)))
 
 (defn define-variable! [variable value env]
   (swap! (first-frame env) assoc variable value))
-
-(defn unbind-variable! [variable env]
-  (swap! (first-frame env) dissoc variable))
 
 
 ;; Setup environment
@@ -298,8 +293,6 @@
         (extend-environment primitive-procedure-names
                             primitive-procedure-objects
                             the-empty-environment)]
-    (define-variable! 'true true initial-env)
-    (define-variable! 'false false initial-env)
     initial-env))
 
 (defn primitive-implementation [proc] (second proc))
@@ -344,7 +337,7 @@
   (driver-loop))
 
 (defn prompt-for-input [string]
-  (newline) (newline) (println string) (newline))
+  (newline) (println string) (newline))
 
 (defn announce-output [string]
   (newline) (println string) (newline))
