@@ -9,7 +9,8 @@
 
 ;; And the evaluator which uses an atom to hold the environment
 ;; from:
-;; https://github.com/gregsexton/SICP-Clojure
+;; https://github.com/gregsexton/SICP-Clojure and
+;; https://github.com/jakemcc/sicp-study/
 
 
 ;; Have to declare all defined stuff below on top (except eval and
@@ -67,11 +68,10 @@
         :else (error "Unknown procedure type -- APPLY" procedure)))
 
 (defn list-of-values [exps env]
-  (lazy-seq
-   (if (no-operands? exps)
-     '()
-     (cons (eval (first-operand exps) env)
-           (list-of-values (rest-operands exps) env)))))
+  (if (no-operands? exps)
+    '()
+    (cons (eval (first-operand exps) env)
+          (list-of-values (rest-operands exps) env))))
 
 (defn eval-sequence [exps env]
   (if (last-exp? exps)
@@ -129,8 +129,9 @@
 (defn cond-else-clause? [clause]
   (= (cond-predicate clause) 'else))
 
-(defn compound-procedure? [p]
-  (tagged-list? p 'procedure))
+(defn compound-procedure? [p] (tagged-list? p 'procedure))
+
+(defn primitive-procedure? [proc] (tagged-list? proc 'primitive))
 
 
 ;; Routines to get information out of expressions
@@ -222,43 +223,72 @@
                  (expand-clauses rest))))))
 
 (defn make-procedure [parameters body env]
-  (println (list 'procedure parameters body env))
   (list 'procedure parameters body env))
 
 
 ;; Environment structure
 
+(defn enclosing-environment [env] (rest env))
+
+(defn first-frame [env] (first env))
+
 (def the-empty-environment '())
-(def first-frame first)
 
 (defn make-frame [variables values]
   (atom (zipmap variables values)))
 
-(def frame-variables keys)
-(def frame-values vals)
+(defn frame-variables [frame] (keys @frame))
+
+(defn frame-values [frame] (vals @frame))
 
 (defn add-binding-to-frame! [var val frame]
   (swap! frame assoc var val))
 
 (defn extend-environment [vars vals base-env]
-  (when (= (count vars) (count vals))
-    (cons (make-frame vars vals)
-          base-env)))
+  (if (= (count vars) (count vals))
+    (cons (make-frame vars vals) base-env)
+    (if (< (count vars) (count vals))
+      (Error. (str "Too many arguments supplied " vars vals))
+      (Error. (str "Too few arguments supplied " vars vals)))))
 
-(defn lookup-variable-value [var env]
-  (some (comp #(get % var) deref) env))
+(defn copy-environment [e]
+  (doall (map #(atom @%) e)))
 
-(defn find-first-frame-containing [var env]
-  (some #(when (contains? (deref %) var) %) env))
+(defn environments-equal? [x y]
+  (reduce #(and %1 %2) true (map #(= @%1 @%2) x y)))
 
-(defn set-variable-value! [var val env]
-  (when-let [frame (find-first-frame-containing var)]
-    (add-binding-to-frame! var val frame)))
+(defn lookup-variable-value [variable env]
+  (letfn [(env-loop [env]
+            (letfn [(scan [frame]
+                      (if (contains? frame variable)
+                        (let [value (get frame variable)]
+                          (if (= value '*unassigned*)
+                            (Error. (str "Unassigned variable " variable))
+                            value))
+                        (env-loop (enclosing-environment env))))]
+              (if (= env the-empty-environment)
+                (Error. (str "Unbound variable " variable))
+                (let [frame (first-frame env)]
+                  (scan @frame)))))]
+    (env-loop env)))
 
-(defn define-variable! [var val env]
-  (add-binding-to-frame! var val
-                         (or (find-first-frame-containing var env)
-                             (first-frame env))))
+
+(defn set-variable-value! [variable value env]
+  (letfn [(env-loop [env]
+            (letfn [(scan [frame]
+                      (if (contains? @frame variable)
+                        (swap! frame assoc variable value)
+                        (env-loop (enclosing-environment env))))]
+              (if (= env the-empty-environment)
+                (Error. (str "Unbound variable -- SET! " variable))
+                (scan (first-frame env)))))]
+    (env-loop env)))
+
+(defn define-variable! [variable value env]
+  (swap! (first-frame env) assoc variable value))
+
+(defn unbind-variable! [variable env]
+  (swap! (first-frame env) dissoc variable))
 
 
 ;; Setup environment
@@ -272,16 +302,13 @@
     (define-variable! 'false false initial-env)
     initial-env))
 
-(defn primitive-procedure? [proc]
-  (tagged-list? proc 'primitive))
-
 (defn primitive-implementation [proc] (second proc))
 
 (def primitive-procedures
-  (list (list 'car first)
-        (list 'cdr rest)
+  (list (list 'first first)
+        (list 'rest rest)
         (list 'cons cons)
-        (list 'null? nil?)
+        (list 'nil? nil?)
         (list 'list list)
         (list '+ +)
         (list '- -)
