@@ -303,6 +303,7 @@
         (list 'cons cons)
         (list 'nil? nil?)
         (list 'list list)
+        (list 'empty? empty?)
         (list '+ +)
         (list '- -)
         (list '* *)
