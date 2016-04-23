@@ -241,7 +241,8 @@
 (defn lookup-variable-value [var env]
   (let [item (env var)]
     (cond (lambda? item) (eval item env)
-          (nil? item) (error "Is not a valid symbol -- LOOKUP-VARIABLE-VALUE" var)
+          (nil? item)
+          (error "Is not a valid symbol -- LOOKUP-VARIABLE-VALUE" var)
           :else item)))
 
 
